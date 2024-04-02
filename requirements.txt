@@ -1,0 +1,4 @@
+streamlit >= 1.15.0 
+speechrecognition 
+spacy >= 3.4.3    
+en_core_web_sm 
