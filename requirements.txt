@@ -1,6 +1,7 @@
-streamlit
-speechrecognition 
-spacy 
-en_core_web_sm 
+
+streamlit==0.88.0
+speechrecognition==3.10.3
+spacy==3.2.1
+
 
 
