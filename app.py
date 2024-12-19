@@ -1,21 +1,30 @@
-import streamlit as st
+from flask import Flask, request, jsonify, render_template
 import speech_recognition as sr
 import spacy
+from werkzeug.utils import secure_filename
+import os
+
+app = Flask(__name__)
 
 # Initialize the speech recognition recognizer
 recognizer = sr.Recognizer()
 
+# Folder to save uploaded files
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
 # Function to convert speech to text
-def speech_to_text(audio_file):
-    with sr.AudioFile(audio_file) as source:
-        audio_data = recognizer.record(source)  # Record the audio file
-        try:
+def speech_to_text(audio_file_path):
+    try:
+        with sr.AudioFile(audio_file_path) as source:
+            audio_data = recognizer.record(source)  # Record the audio file
             text = recognizer.recognize_google(audio_data)  # Use Google Web Speech API for speech recognition
             return text
-        except sr.UnknownValueError:
-            return "Sorry, could not understand the audio."
-        except sr.RequestError as e:
-            return f"Could not request results from Google Speech Recognition service; {e}"
+    except sr.UnknownValueError:
+        return "Sorry, could not understand the audio."
+    except sr.RequestError as e:
+        return f"Could not request results from Google Speech Recognition service; {e}"
 
 # Function for basic NLP processing
 def nlp_processing(text):
@@ -25,27 +34,42 @@ def nlp_processing(text):
     named_entities = [(ent.text, ent.label_) for ent in doc.ents]
     return named_entities
 
-# Main function
-def main():
-    st.title("Speech to Text and NLP Processing")
+# Route to upload and process the audio file
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        # Check if file is in the request
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
 
-    # Upload audio file
-    uploaded_file = st.file_uploader("Upload an audio file", type=["wav"])
+        file = request.files["file"]
 
-    if uploaded_file is not None:
-        audio_file = uploaded_file.name
-        st.audio(uploaded_file, format='audio/wav')
+        if file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
 
-        # Convert speech to text
-        text = speech_to_text(uploaded_file)
-        st.subheader("Transcribed Text:")
-        st.write(text)
+        if file:
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            file.save(filepath)
 
-        # Perform NLP processing
-        named_entities = nlp_processing(text)
-        st.subheader("Named Entities:")
-        for entity, label in named_entities:
-            st.write(f"{entity}: {label}")
+            # Convert speech to text
+            transcription = speech_to_text(filepath)
 
+            # Perform NLP processing if transcription is successful
+            if transcription and transcription != "Sorry, could not understand the audio.":
+                named_entities = nlp_processing(transcription)
+                return jsonify({
+                    "transcription": transcription,
+                    "named_entities": named_entities
+                })
+
+            return jsonify({
+                "transcription": transcription,
+                "named_entities": []
+            })
+
+    return render_template("index.html")
+
+# Start the Flask app
 if __name__ == "__main__":
-    main()
+    app.run(debug=True)
